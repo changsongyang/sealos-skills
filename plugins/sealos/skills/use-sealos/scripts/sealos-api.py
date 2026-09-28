@@ -129,14 +129,14 @@ def kubeconfig_field(kubeconfig, field):
 
 
 def region_domain():
-    """Use the active kubeconfig server; OAuth metadata may describe another region."""
+    """Region domain (e.g. usw-1.sealos.io), from auth.json or the kubeconfig server."""
+    auth = load_auth()
+    if auth.get("region"):
+        return urllib.parse.urlparse(auth["region"]).netloc
     server = kubeconfig_field(load_kubeconfig(), "server")
-    if server:
-        return urllib.parse.urlparse(server).hostname
-    auth_region = load_auth().get("region")
-    if auth_region:
-        return urllib.parse.urlparse(auth_region).hostname
-    fail("cannot determine region: no server in kubeconfig or auth.json")
+    if not server:
+        fail("cannot determine region: no auth.json region and no server in kubeconfig")
+    return urllib.parse.urlparse(server).hostname
 
 
 def save_credentials(region, access_token, regional_token, kubeconfig, workspace):
@@ -164,23 +164,19 @@ def save_credentials(region, access_token, regional_token, kubeconfig, workspace
 def cmd_status(_args):
     out = {"authenticated": False}
     if os.path.exists(KUBECONFIG_PATH):
-        with open(KUBECONFIG_PATH) as stream:
-            kc = stream.read()
+        kc = open(KUBECONFIG_PATH).read()
         namespace = kubeconfig_field(kc, "namespace")
         server = kubeconfig_field(kc, "server")
         if server and ("token:" in kc or "client-certificate" in kc):
             auth = load_auth()
-            cached_region = urllib.parse.urlparse(auth.get("region") or "").hostname
-            cached_workspace = (auth.get("current_workspace") or {}).get("id")
-            cache_matches = cached_region == urllib.parse.urlparse(server).hostname and cached_workspace == namespace
             out = {
                 "authenticated": True,
                 "kubeconfig": KUBECONFIG_PATH,
                 "server": server,
                 "namespace": namespace,
                 "region_domain": urllib.parse.urlparse(server).hostname,
-                "workspace": namespace,
-                "authenticated_at": auth.get("authenticated_at") if cache_matches else None,
+                "workspace": (auth.get("current_workspace") or {}).get("id"),
+                "authenticated_at": auth.get("authenticated_at"),
             }
     print(json.dumps(out, indent=2))
 
@@ -290,9 +286,6 @@ def regional_token_or_fail():
     auth = load_auth()
     if not auth.get("regional_token"):
         fail("no regional token; run `sealos-api.py login` first")
-    auth_region = urllib.parse.urlparse(auth.get("region") or "").hostname
-    if auth_region != region_domain():
-        fail("regional OAuth token does not match the active kubeconfig region; log in to the selected region")
     return auth
 
 
