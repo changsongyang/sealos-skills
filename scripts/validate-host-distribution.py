@@ -37,6 +37,9 @@ def main() -> None:
     assert {path.name for path in (ROOT / "skills").iterdir()} == set(SKILLS)
 
     codex_marketplace = read_json(".agents/plugins/marketplace.json")
+    assert codex_marketplace["name"] == "sealos"
+    assert codex_marketplace["interface"]["displayName"] == "Sealos"
+    assert codex_marketplace["plugins"][0]["name"] == "sealos"
     assert codex_marketplace["plugins"][0]["source"] == {
         "source": "local", "path": "./plugins/sealos"
     }
