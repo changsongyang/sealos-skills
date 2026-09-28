@@ -3,20 +3,10 @@ import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
 import { apply } from './index.js'
 
-const skillsRoot = fileURLToPath(new URL('./skills/', import.meta.url))
-const expectedNames = [
-  'cloud-native-readiness',
-  'docker-to-sealos',
-  'dockerfile-skill',
-  'sealos-app-builder',
-  'sealos-canvas',
-  'sealos-database',
-  'sealos-deploy',
-  'sealos-s3',
-]
+const skillDir = fileURLToPath(new URL('./plugins/sealos/skills/use-sealos/', import.meta.url))
 
 describe('sealos', () => {
-  it('registers every root skill bundle from skills/*/SKILL.md', async () => {
+  it('registers use-sealos from the packaged SKILL.md', async () => {
     const providers = []
     apply({
       skills: {
@@ -29,19 +19,19 @@ describe('sealos', () => {
     assert.equal(providers[0].name, 'sealos')
 
     const listed = await providers[0].list()
-    assert.deepEqual(listed.map(skill => skill.name), expectedNames)
-    for (const skill of listed) {
-      assert.equal(skill.source, 'bundled')
-      assert.equal(skill.rank, 600)
-      assert.equal(skill.resourceBase.kind, 'directory')
-      assert.ok(skill.resourceBase.path.startsWith(skillsRoot))
-      assert.equal('content' in skill, false)
-    }
+    assert.equal(listed.length, 1)
+    assert.equal(listed[0].name, 'use-sealos')
+    assert.match(listed[0].description, /Sealos Cloud/)
+    assert.deepEqual(listed[0].resourceBase, { kind: 'directory', path: skillDir })
+    assert.equal(listed[0].source, 'bundled')
+    assert.equal(listed[0].rank, 600)
+    assert.equal('content' in listed[0], false)
 
-    const loaded = await providers[0].get(listed.find(skill => skill.name === 'sealos-deploy'))
-    assert.equal(loaded.name, 'sealos-deploy')
-    assert.match(loaded.content, /# Sealos Deploy/)
+    const loaded = await providers[0].get(listed[0])
+    assert.equal(loaded.name, 'use-sealos')
+    assert.match(loaded.content, /# Use Sealos/)
     assert.doesNotMatch(loaded.content, /^---/)
+    assert.deepEqual(loaded.resourceBase, { kind: 'directory', path: skillDir })
     assert.equal('rank' in loaded, false)
 
     assert.equal(await providers[0].get({ name: 'other-skill' }), undefined)

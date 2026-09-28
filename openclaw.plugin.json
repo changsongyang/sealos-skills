@@ -1,12 +1,8 @@
 {
   "id": "sealos",
-  "version": "1.2.5",
+  "version": "2.0.0",
   "format": "claude-plugin",
-  "source": ".claude-plugin/plugin.json",
-  "commands": [
-    "./commands/"
-  ],
-  "commandCount": 1,
+  "source": "plugins/sealos/.claude-plugin/plugin.json",
   "hostTargets": [
     "claude-code",
     "openclaw"

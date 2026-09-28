@@ -1,0 +1,20 @@
+{
+  "name": "sealos",
+  "version": "2.0.0",
+  "description": "Sealos agent skills for deploying, configuring, monitoring, and troubleshooting apps on Sealos Cloud from Claude Code. Deploy from the template store, official Docker images, or project source; manage databases, object storage, networking, and logs.",
+  "author": {
+    "name": "Sealos",
+    "email": "contact@sealos.io"
+  },
+  "homepage": "https://sealos.io",
+  "repository": "https://github.com/labring/sealos-skills",
+  "license": "MIT",
+  "commands": [
+    "./commands/"
+  ],
+  "skills": [
+    "./skills/use-sealos",
+    "./skills/sealos-deploy",
+    "./skills/k8s-kaniko-job"
+  ]
+}
