@@ -58,6 +58,33 @@ IMAGE_RE = re.compile(
     r"^ghcr\.io/[a-z0-9][a-z0-9._-]*/[a-z0-9][a-z0-9._/-]*:"
     r"[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$"
 )
+SAMPLE_MANIFEST = """apiVersion: batch/v1
+kind: Job
+metadata:
+  name: kaniko-example
+  namespace: ns-example
+spec:
+  activeDeadlineSeconds: 1800
+  backoffLimit: 0
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+      - name: kaniko
+        image: gcr.io/kaniko-project/executor:v1.24.0
+        args:
+        - '--dockerfile=Dockerfile'
+        - '--context=s3://kaniko-contexts/contexts/devbox/sample/context.tar.gz'
+        - '--destination=ghcr.io/example/app:preview'
+        - '--custom-platform=linux/amd64'
+        - '--digest-file=/dev/termination-log'
+        env:
+        - name: AWS_SECRET_ACCESS_KEY
+          valueFrom:
+            secretKeyRef:
+              name: devbox-secret
+              key: SEALOS_DEVBOX_JWT_SECRET
+"""
 
 
 def log(message):
@@ -561,33 +588,7 @@ def main():
     job_name = f"kaniko-{build_id}"[:63].rstrip("-")
 
     if args.render_only:
-        redacted_build_args = ["ARG=<redacted>" for _ in args.build_arg]
-        manifest = render_job(
-            job_name="kaniko-example",
-            namespace="ns-example",
-            service_account="default",
-            kaniko_image=DEFAULT_KANIKO_IMAGE,
-            platform=DEFAULT_PLATFORM,
-            context_uri="s3://kaniko-contexts/contexts/devbox/sample/context.tar.gz",
-            dockerfile="Dockerfile",
-            target_image="ghcr.io/example/app:preview",
-            s3_endpoint="http://devbox-net:1319",
-            aws_region="sealos-internal",
-            registry_secret="use-sealos-ghcr-auth-render",
-            s3_env_lines=(
-                [
-                    yaml_env_literal("AWS_ACCESS_KEY_ID", "<redacted>"),
-                    yaml_env_secret(
-                        "AWS_SECRET_ACCESS_KEY",
-                        "devbox-secret",
-                        "SEALOS_DEVBOX_JWT_SECRET",
-                    ),
-                ]
-            ),
-            build_args=redacted_build_args,
-            deadline_seconds=deadline_seconds,
-        )
-        print(manifest)
+        sys.stdout.write(SAMPLE_MANIFEST)
         return
 
     if shutil.which("kubectl") is None:

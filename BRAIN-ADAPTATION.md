@@ -177,8 +177,9 @@ Devbox 运行时（labring-actions/devbox-runtime sandbox/v1）自带 VersityGW�
 3. Brain 安装脚本 marker 检查逐字模拟 → 通过；安装后
    `../use-sealos/scripts/sealos-api.py`、`../k8s-kaniko-job/scripts/kaniko-build.py`
    等 sibling 相对路径全部存在。
-4. `kaniko-build.py --render-only` → 输出脱敏样例 Job，用于校验 YAML 结构、
-   deadline 钳制和 digest-file；实际 S3 端点与 Secret 引用须在 Brain 环境实跑验收。
+4. `kaniko-build.py --render-only` → 校验输入与 deadline 后输出固定脱敏样例
+   Job，用于校验 YAML 结构和 digest-file；实际 S3 端点与 Secret 引用须在
+   Brain 环境实跑验收。
    过期 deadline / 非 ghcr 镜像 / 缺 tag / 非法 build-arg 均正确报错。
 5. `sealos-api.py`：打桩 HTTP 后端到端验证 `deploy` 请求体——有
    `SEALAI_DEPLOY_LABELS_JSON` 时带 `extraLabels`，无则省略；kubeconfig 三级
