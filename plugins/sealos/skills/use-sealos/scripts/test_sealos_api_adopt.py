@@ -343,6 +343,54 @@ class AdoptTests(unittest.TestCase):
         self.assertEqual(http.brain_calls(), [])
 
 
+class RegionAuthorityTests(unittest.TestCase):
+    def test_kubeconfig_server_wins_over_stale_oauth_region(self):
+        with (
+            patch.object(api, "load_kubeconfig", return_value="server: https://usw-1.sealos.io:6443\n"),
+            patch.object(api, "load_auth", return_value={"region": "https://hzh.sealos.run"}),
+        ):
+            self.assertEqual(api.region_domain(), "usw-1.sealos.io")
+
+    def test_status_workspace_uses_active_kubeconfig_namespace(self):
+        with tempfile.TemporaryDirectory() as directory:
+            kubeconfig = os.path.join(directory, "kubeconfig")
+            with open(kubeconfig, "w") as stream:
+                stream.write(
+                    "server: https://usw-1.sealos.io:6443\n"
+                    "namespace: ns-usw-test\n"
+                    "token: fixture\n"
+                )
+            output = io.StringIO()
+            with (
+                patch.object(api, "KUBECONFIG_PATH", kubeconfig),
+                patch.object(api, "load_auth", return_value={
+                    "region": "https://hzh.sealos.run",
+                    "current_workspace": {"id": "ns-hzh-test"},
+                }),
+                contextlib.redirect_stdout(output),
+            ):
+                api.cmd_status(argparse.Namespace())
+        status = json.loads(output.getvalue())
+        self.assertEqual(status["region_domain"], "usw-1.sealos.io")
+        self.assertEqual(status["workspace"], "ns-usw-test")
+        self.assertIsNone(status["authenticated_at"])
+
+    def test_stale_regional_token_cannot_switch_the_wrong_region(self):
+        error_output = io.StringIO()
+        with (
+            patch.object(api, "load_kubeconfig", return_value="server: https://usw-1.sealos.io:6443\n"),
+            patch.object(api, "load_auth", return_value={
+                "region": "https://hzh.sealos.run",
+                "regional_token": "fixture-secret",
+            }),
+            contextlib.redirect_stderr(error_output),
+        ):
+            with self.assertRaises(SystemExit):
+                api.regional_token_or_fail()
+        self.assertIn("does not match", error_output.getvalue())
+        self.assertNotIn("fixture-secret", error_output.getvalue())
+
+
 class BrainRegionTests(unittest.TestCase):
     def test_io_regions_enabled(self):
         for domain in ("usw-1.sealos.io", "sealos.io", "USW-1.SEALOS.IO", "usw-1.sealos.io."):
