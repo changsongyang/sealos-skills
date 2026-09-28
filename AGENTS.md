@@ -42,6 +42,7 @@ then the full gate for changed surfaces:
 
 - `npm ci` and `npm test` for the DeepSeek bundle and host coverage.
 - `python3 -m unittest discover -s plugins/sealos/skills/use-sealos/scripts -p 'test_*.py' -v` for the Sealos API.
+- `python3 -m unittest discover -s plugins/sealos/skills/k8s-kaniko-job/scripts -p 'test_*.py' -v` for the Kaniko executor.
 - `python3 -m py_compile` for changed Python files.
 - `node --check index.js` and `shellcheck` for changed shell scripts.
 - `python3 scripts/validate-host-distribution.py` when host manifests,

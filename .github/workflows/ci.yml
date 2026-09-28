@@ -41,7 +41,9 @@ jobs:
           printf 'compiling %s\n' "${scripts[@]}"
           python3 -m py_compile "${scripts[@]}"
       - name: Unit tests
-        run: python3 -m unittest discover -s plugins/sealos/skills/use-sealos/scripts -p 'test_*.py' -v
+        run: |
+          python3 -m unittest discover -s plugins/sealos/skills/use-sealos/scripts -p 'test_*.py' -v
+          python3 -m unittest discover -s plugins/sealos/skills/k8s-kaniko-job/scripts -p 'test_*.py' -v
 
   manifests:
     name: Manifests

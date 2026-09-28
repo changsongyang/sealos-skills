@@ -81,13 +81,15 @@ termination message lost), fall back to the tag reference in `image`.
 
 ## Failure triage
 
-The script prints Job status, pod state, and the Kaniko log tail on failure.
+The script reports the Job and namespace on failure without echoing raw Pod
+logs or Kubernetes error text, which may contain credentials. Inspect the
+named Job and Pods directly, then summarize only redacted findings.
 
 | Symptom | Cause → fix |
 |---|---|
 | Job pod `ImagePullBackOff` on the executor image | cluster cannot pull `gcr.io/kaniko-project/executor` → report; there is no local fallback |
 | Kaniko log: `error uploading context` / S3 connection refused | the Job cannot reach the VersityGW endpoint → check `.sealos/build-runtime.json.s3Endpoint`; never point the Job at 127.0.0.1 |
-| Kaniko log: `401/403` on push | token scope or owner mismatch → the script's preflight output shows the authenticated login |
+| Kaniko log: `401/403` on push | token scope or owner mismatch → the script validates both before creating the Job; inspect the token and image owner privately |
 | Dockerfile build error | fix the Dockerfile in the workspace and rerun; each run creates a fresh Job |
 | Job deadline exceeded | build too slow → trim the context (`.dockerignore`), use smaller base images |
 
@@ -97,3 +99,5 @@ teardown unless the user asks.
 
 Never print `GITHUB_TOKEN`, S3 credentials, or Secret payloads. Never pass
 secrets through `--build-arg` — build args are visible in the Job spec.
+`--render-only` prints a synthetic, redacted Job manifest for structural
+inspection; it does not reveal values from the runtime contract or build args.

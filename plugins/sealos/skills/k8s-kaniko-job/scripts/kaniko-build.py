@@ -38,7 +38,6 @@ import re
 import shutil
 import subprocess
 import sys
-import tempfile
 import time
 import urllib.error
 import urllib.parse
@@ -55,6 +54,10 @@ DEFAULT_S3_PORT = "1319"
 TAR_EXCLUDES = [".git", ".sealos", ".versitygw-s3", ".versitygw-iam", ".versitygw-versioning"]
 DNS_LABEL_RE = re.compile(r"^[a-z0-9]([-a-z0-9]*[a-z0-9])?$")
 DIGEST_RE = re.compile(r"sha256:[a-f0-9]{64}")
+IMAGE_RE = re.compile(
+    r"^ghcr\.io/[a-z0-9][a-z0-9._-]*/[a-z0-9][a-z0-9._/-]*:"
+    r"[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$"
+)
 
 
 def log(message):
@@ -110,7 +113,7 @@ def load_runtime_contract(path):
             data = json.load(f)
         return data if isinstance(data, dict) else {}
     except ValueError:
-        log(f"warning: {path} is not valid JSON; ignoring")
+        log("warning: build runtime contract is not valid JSON; ignoring")
         return {}
 
 
@@ -231,7 +234,7 @@ def resolve_deadline_seconds(runtime, flag_timeout):
                 fail("build deadline from build-runtime.json has already elapsed")
             seconds = min(seconds, remaining)
         except ValueError:
-            log(f"warning: unparsable buildDeadlineAt {deadline_at!r}; using {seconds}s")
+            log("warning: unparsable buildDeadlineAt; using the configured limit")
     return min(seconds, MAX_BUILD_SECONDS)
 
 
@@ -251,19 +254,17 @@ def check_ghcr_token(target_image):
         },
     )
     if status != 200 or not isinstance(user, dict) or not user.get("login"):
-        fail(f"GITHUB_TOKEN validation failed (GitHub /user returned {status})")
+        fail("GITHUB_TOKEN validation failed")
     login = user["login"]
     scopes = [s.strip() for s in (headers.get("x-oauth-scopes") or "").split(",") if s.strip()]
     if scopes and "write:packages" not in scopes:
-        fail("GITHUB_TOKEN lacks the write:packages scope", scopes=scopes)
+        fail("GITHUB_TOKEN lacks the write:packages scope")
     owner = target_image.split("/")[1]
     if owner != owner.lower():
-        fail(f"GHCR owner must be lowercase: {owner}")
+        fail("GHCR owner must be lowercase")
     if owner != login.lower():
-        fail(
-            f"target image owner {owner!r} does not match the token login {login.lower()!r}",
-            hint="use ghcr.io/<token-login>/<repo>:<tag>",
-        )
+        fail("target image owner does not match the token login",
+             hint="use ghcr.io/<token-login>/<repo>:<tag>")
     return login, token
 
 
@@ -299,15 +300,9 @@ def classify_pull(image_repo, digest):
 
 
 def validate_image(image):
-    if not image.startswith("ghcr.io/"):
-        fail(f"target image must be on ghcr.io: {image}")
-    if "@" in image:
-        fail("target image must be a tag reference, not a digest")
-    repo, _, tag = image.partition(":")
-    if not tag or "/" in tag:
-        fail(f"target image must include a tag: {image}")
-    if len(repo.split("/")) < 3:
-        fail(f"target image must be ghcr.io/<owner>/<repo>: {image}")
+    if not IMAGE_RE.fullmatch(image):
+        fail("target image must be a ghcr.io/<owner>/<repo>:<tag> reference")
+    repo, tag = image.rsplit(":", 1)
     return repo, tag
 
 
@@ -319,12 +314,12 @@ def sanitize_dns_label(value, max_length):
 def prepare_context_tar(context_dir, dockerfile, posix_dir, prefix, devbox, build_id):
     context_dir = os.path.realpath(context_dir)
     if not os.path.isdir(context_dir):
-        fail(f"context directory not found: {context_dir}")
+        fail("context directory not found")
     dockerfile_abs = os.path.realpath(os.path.join(context_dir, dockerfile))
     if not dockerfile_abs.startswith(context_dir + os.sep):
-        fail(f"dockerfile must live inside the context: {dockerfile}")
+        fail("dockerfile must live inside the context")
     if not os.path.isfile(dockerfile_abs):
-        fail(f"dockerfile not found: {dockerfile_abs}")
+        fail("dockerfile not found")
     dockerfile_rel = os.path.relpath(dockerfile_abs, context_dir).replace(os.sep, "/")
 
     object_dir = os.path.join(posix_dir, devbox, build_id)
@@ -333,13 +328,13 @@ def prepare_context_tar(context_dir, dockerfile, posix_dir, prefix, devbox, buil
     exclude_args = []
     for name in TAR_EXCLUDES:
         exclude_args += ["--exclude", f"./{name}"]
-    code, _, err = run(
+    code, _, _ = run(
         ["tar", *exclude_args, "-C", context_dir, "-czf", tar_path, "."], timeout=600
     )
     if code != 0:
-        fail(f"tar failed: {err.strip()[:500]}")
+        fail("tar failed")
     size = os.path.getsize(tar_path)
-    log(f"context: {tar_path} ({size} bytes), dockerfile: {dockerfile_rel}")
+    log("build context archived")
     object_key = f"{prefix}/{devbox}/{build_id}/context.tar.gz"
     return object_key, dockerfile_rel, size
 
@@ -347,20 +342,16 @@ def prepare_context_tar(context_dir, dockerfile, posix_dir, prefix, devbox, buil
 def create_registry_secret(namespace, login, token, secret_name):
     auth = base64.b64encode(f"{login}:{token}".encode()).decode()
     docker_config = json.dumps({"auths": {"ghcr.io": {"auth": auth}}})
-    with tempfile.TemporaryDirectory() as tmp:
-        config_path = os.path.join(tmp, "config.json")
-        with open(config_path, "w") as f:
-            f.write(docker_config)
-        os.chmod(config_path, 0o600)
-        code, _, err = kubectl(
-            [
-                "create", "secret", "generic", secret_name,
-                "-n", namespace,
-                f"--from-file=config.json={config_path}",
-            ]
-        )
+    manifest = {
+        "apiVersion": "v1",
+        "kind": "Secret",
+        "metadata": {"name": secret_name, "namespace": namespace},
+        "type": "Opaque",
+        "stringData": {"config.json": docker_config},
+    }
+    code, _, _ = kubectl(["create", "-f", "-"], input_text=json.dumps(manifest))
     if code != 0:
-        fail(f"failed to create registry secret: {err.strip()[:500]}")
+        fail("failed to create registry secret")
 
 
 def s3_credential_env(runtime, namespace):
@@ -380,7 +371,7 @@ def s3_credential_env(runtime, namespace):
                 yaml_env_secret("AWS_SECRET_ACCESS_KEY", ref["name"], ref["key"]),
             ]
             return lines, None
-        log(f"warning: runtime secretKeyRef {ref['name']} not found; falling back to env")
+        log("warning: runtime S3 secret reference is unavailable; falling back to env")
     secret_value = (
         os.environ.get("AWS_SECRET_ACCESS_KEY")
         or os.environ.get("SEALOS_DEVBOX_JWT_SECRET")
@@ -392,17 +383,19 @@ def s3_credential_env(runtime, namespace):
             "AWS_SECRET_ACCESS_KEY / SEALOS_DEVBOX_JWT_SECRET / DEVBOX_JWT_SECRET are unset"
         )
     secret_name = f"use-sealos-kaniko-s3-{uuid.uuid4().hex[:8]}"
-    with tempfile.TemporaryDirectory() as tmp:
-        env_file = os.path.join(tmp, "s3.env")
-        with open(env_file, "w") as f:
-            f.write(f"AWS_ACCESS_KEY_ID={access_key}\nAWS_SECRET_ACCESS_KEY={secret_value}\n")
-        os.chmod(env_file, 0o600)
-        code, _, err = kubectl(
-            ["create", "secret", "generic", secret_name, "-n", namespace,
-             f"--from-env-file={env_file}"]
-        )
+    manifest = {
+        "apiVersion": "v1",
+        "kind": "Secret",
+        "metadata": {"name": secret_name, "namespace": namespace},
+        "type": "Opaque",
+        "stringData": {
+            "AWS_ACCESS_KEY_ID": access_key,
+            "AWS_SECRET_ACCESS_KEY": secret_value,
+        },
+    }
+    code, _, _ = kubectl(["create", "-f", "-"], input_text=json.dumps(manifest))
     if code != 0:
-        fail(f"failed to create S3 secret: {err.strip()[:500]}")
+        fail("failed to create S3 secret")
     lines = [
         yaml_env_secret("AWS_ACCESS_KEY_ID", secret_name, "AWS_ACCESS_KEY_ID"),
         yaml_env_secret("AWS_SECRET_ACCESS_KEY", secret_name, "AWS_SECRET_ACCESS_KEY"),
@@ -431,9 +424,9 @@ def yaml_env_secret(name, secret, key):
 def validate_build_arg(pair):
     key, sep, _ = pair.partition("=")
     if not sep or not re.match(r"^[A-Za-z_][A-Za-z0-9_]*$", key):
-        fail(f"--build-arg must be KEY=value with an env-style key: {pair}")
+        fail("--build-arg must be KEY=value with an env-style key")
     if "\n" in pair or "\r" in pair:
-        fail(f"--build-arg value must be single-line: {key}")
+        fail("--build-arg value must be single-line")
     return pair
 
 
@@ -444,7 +437,7 @@ def render_job(
 ):
     for name, value in [("namespace", namespace), ("job name", job_name)]:
         if not DNS_LABEL_RE.match(value) or len(value) > 63:
-            fail(f"{name} must be a DNS label up to 63 chars: {value}")
+            fail(f"{name} must be a DNS label up to 63 chars")
     build_arg_lines = "".join(
         f"        - {yaml_quote(f'--build-arg={pair}')}\n" for pair in build_args
     )
@@ -515,22 +508,8 @@ spec:
 """
 
 
-def collect_failure_diagnostics(namespace, job_name):
-    diagnostics = []
-    for label, cmd in [
-        ("job", ["get", "job", job_name, "-n", namespace, "-o", "jsonpath={.status}"]),
-        ("pods", ["get", "pods", "-n", namespace, "-l", f"job-name={job_name}", "-o", "wide"]),
-        ("logs", ["logs", f"job/{job_name}", "-n", namespace, "--tail=60"]),
-    ]:
-        _, out, err = kubectl(cmd)
-        text = (out or err).strip()
-        if text:
-            diagnostics.append(f"--- {label} ---\n{text[:3000]}")
-    return "\n".join(diagnostics)
-
-
 def read_digest(namespace, job_name):
-    code, out, err = kubectl(
+    code, out, _ = kubectl(
         [
             "get", "pods", "-n", namespace, "-l", f"job-name={job_name}",
             "-o",
@@ -538,7 +517,7 @@ def read_digest(namespace, job_name):
         ]
     )
     if code != 0:
-        log(f"warning: could not read termination message: {err.strip()[:200]}")
+        log("warning: could not read termination message")
         return None
     match = DIGEST_RE.search(out or "")
     return match.group(0) if match else None
@@ -559,10 +538,10 @@ def main():
     parser.add_argument("--kaniko-image", default=DEFAULT_KANIKO_IMAGE)
     parser.add_argument("--timeout", type=int, help=f"build seconds cap (max {MAX_BUILD_SECONDS})")
     parser.add_argument("--render-only", action="store_true",
-                        help="print the Job manifest and exit; no kubectl, no tar upload")
+                        help="print a redacted sample Job manifest; no kubectl or tar upload")
     args = parser.parse_args()
 
-    image_repo, image_tag = validate_image(args.image)
+    image_repo, _ = validate_image(args.image)
     for pair in args.build_arg:
         validate_build_arg(pair)
 
@@ -582,33 +561,30 @@ def main():
     job_name = f"kaniko-{build_id}"[:63].rstrip("-")
 
     if args.render_only:
-        posix_dir, bucket, prefix = resolve_context_store(runtime)
+        redacted_build_args = ["ARG=<redacted>" for _ in args.build_arg]
         manifest = render_job(
-            job_name=job_name,
-            namespace=args.namespace or os.environ.get("SEALAI_NAMESPACE", "ns-example"),
-            service_account=os.environ.get("SERVICE_ACCOUNT_NAME"),
-            kaniko_image=args.kaniko_image,
-            platform=args.platform,
-            context_uri=f"s3://{bucket}/{prefix}/{devbox}/{build_id}/context.tar.gz",
-            dockerfile=args.dockerfile,
-            target_image=args.image,
-            s3_endpoint=runtime.get("s3Endpoint")
-            or os.environ.get("KANIKO_JOB_S3_ENDPOINT", "http://devbox-net:1319"),
-            aws_region=aws_region,
+            job_name="kaniko-example",
+            namespace="ns-example",
+            service_account="default",
+            kaniko_image=DEFAULT_KANIKO_IMAGE,
+            platform=DEFAULT_PLATFORM,
+            context_uri="s3://kaniko-contexts/contexts/devbox/sample/context.tar.gz",
+            dockerfile="Dockerfile",
+            target_image="ghcr.io/example/app:preview",
+            s3_endpoint="http://devbox-net:1319",
+            aws_region="sealos-internal",
             registry_secret="use-sealos-ghcr-auth-render",
             s3_env_lines=(
                 [
-                    yaml_env_literal(
-                        "AWS_ACCESS_KEY_ID", runtime.get("accessKeyId") or "admin"
-                    ),
+                    yaml_env_literal("AWS_ACCESS_KEY_ID", "<redacted>"),
                     yaml_env_secret(
                         "AWS_SECRET_ACCESS_KEY",
-                        (runtime.get("secretKeyRef") or {}).get("name", "devbox-secret"),
-                        (runtime.get("secretKeyRef") or {}).get("key", "SEALOS_DEVBOX_JWT_SECRET"),
+                        "devbox-secret",
+                        "SEALOS_DEVBOX_JWT_SECRET",
                     ),
                 ]
             ),
-            build_args=args.build_arg,
+            build_args=redacted_build_args,
             deadline_seconds=deadline_seconds,
         )
         print(manifest)
@@ -619,18 +595,18 @@ def main():
     if shutil.which("tar") is None:
         fail("tar is required")
 
-    namespace, ns_source = resolve_namespace(args.namespace)
-    log(f"namespace: {namespace} (from {ns_source})")
+    namespace, _ = resolve_namespace(args.namespace)
+    log("namespace selected")
     service_account = resolve_service_account(namespace)
     if service_account:
-        log(f"service account: {service_account}")
+        log("service account resolved")
 
     login, token = check_ghcr_token(args.image)
-    log(f"ghcr: authenticated as {login}")
+    log("ghcr authentication validated")
 
     s3_endpoint = resolve_job_s3_endpoint(runtime, namespace)
     posix_dir, bucket, prefix = resolve_context_store(runtime)
-    log(f"s3: job endpoint {s3_endpoint}, bucket {bucket}, posix dir {posix_dir}")
+    log("S3 context store resolved")
 
     object_key, dockerfile_rel, tar_size = prepare_context_tar(
         args.context, args.dockerfile, posix_dir, prefix, devbox, build_id
@@ -639,7 +615,7 @@ def main():
 
     registry_secret = f"use-sealos-ghcr-auth-{uuid.uuid4().hex[:8]}"
     create_registry_secret(namespace, login, token, registry_secret)
-    s3_env_lines, s3_secret = s3_credential_env(runtime, namespace)
+    s3_env_lines, _ = s3_credential_env(runtime, namespace)
 
     manifest = render_job(
         job_name=job_name,
@@ -657,13 +633,13 @@ def main():
         build_args=args.build_arg,
         deadline_seconds=deadline_seconds,
     )
-    code, _, err = kubectl(["apply", "-f", "-"], input_text=manifest)
+    code, _, _ = kubectl(["apply", "-f", "-"], input_text=manifest)
     if code != 0:
-        fail(f"kubectl apply failed: {err.strip()[:500]}")
-    log(f"job {job_name} created; waiting up to {deadline_seconds + WAIT_SLACK_SECONDS}s")
+        fail("kubectl apply failed")
+    log("kaniko job created; waiting for completion")
 
     wait_timeout = deadline_seconds + WAIT_SLACK_SECONDS
-    code, _, err = kubectl(
+    code, _, _ = kubectl(
         [
             "wait", "--for=condition=Complete", f"job/{job_name}",
             "-n", namespace, f"--timeout={wait_timeout}s",
@@ -671,14 +647,11 @@ def main():
         timeout=wait_timeout + 30,
     )
     if code != 0:
-        diagnostics = collect_failure_diagnostics(namespace, job_name)
-        log(diagnostics)
         fail(
             "kaniko job did not complete",
             job=job_name,
             namespace=namespace,
-            wait_error=err.strip()[:300],
-            diagnostics_tail=diagnostics[-1500:],
+            hint="inspect the named Job and Pods in the selected namespace",
         )
 
     digest = read_digest(namespace, job_name)
@@ -691,10 +664,7 @@ def main():
         "pull": pull,
         "job": job_name,
         "namespace": namespace,
-        "context_uri": context_uri,
         "context_bytes": tar_size,
-        "registry_secret": registry_secret,
-        **({"s3_secret": s3_secret} if s3_secret else {}),
     }
     if not digest:
         result["warning"] = (
