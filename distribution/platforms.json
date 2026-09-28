@@ -1,120 +1,91 @@
 {
   "name": "sealos",
-  "version": "1.2.5",
+  "version": "2.0.0",
   "repository": "https://github.com/labring/sealos-skills",
-  "lastUpdated": "2026-08-14",
   "platforms": [
     {
       "id": "codex",
-      "name": "Codex CLI / Codex App",
-      "claim": "verified",
       "runtime": "plugin",
-      "install": "codex plugin marketplace add labring/sealos-skills && codex plugin add sealos@sealos",
-      "alternateInstall": "npx plugins add https://github.com/labring/sealos-skills --target codex",
-      "invoke": "Use $sealos in Codex CLI; select Sealos from Plugins in Codex App",
-      "commands": "supported",
-      "evidence": "Phase 1 native marketplace add/list/install + Phase 7 offline route/inventory/pointer/version/link checks + codex_manifest+repo_marketplace",
-      "lastVerified": "2026-06-15"
+      "claim": "install-target",
+      "manifest": "plugins/sealos/.codex-plugin/plugin.json",
+      "invoke": "$sealos"
     },
     {
       "id": "claude-code",
-      "name": "Claude Code",
-      "claim": "install-target",
       "runtime": "plugin",
-      "install": "claude plugin marketplace add labring/sealos-skills && claude plugin install sealos@sealos",
-      "alternateInstall": "npx plugins add https://github.com/labring/sealos-skills --target claude-code",
-      "invoke": "/sealos",
-      "commands": "supported",
-      "evidence": ".claude-plugin/plugin.json + .claude-plugin/marketplace.json + marketplace.json + commands/sealos.md + Phase 7 offline route/inventory/pointer/version/link validation + README native CLI contract validation",
-      "lastVerified": "2026-06-16"
+      "claim": "install-target",
+      "manifest": "plugins/sealos/.claude-plugin/plugin.json",
+      "invoke": "/sealos"
+    },
+    {
+      "id": "cursor",
+      "runtime": "plugin",
+      "claim": "install-target",
+      "manifest": "plugins/sealos/.cursor-plugin/plugin.json",
+      "invoke": "natural language"
     },
     {
       "id": "qoder",
-      "name": "Qoder",
-      "claim": "install-target",
       "runtime": "plugin",
-      "install": "Run python3 scripts/package-qoder-plugin.py, then import the versioned ZIP in Qoder",
-      "invoke": "/sealos or ask Qoder to use a specific Sealos skill; Canvas requires verified .sealos/state.json deployment state",
-      "commands": "supported",
-      "evidence": ".qoder-plugin/plugin.json + qoder.md + commands/sealos.md + root skills/** + Phase 7 offline route/inventory/pointer/version/link checks + temporary Qoder package validation",
-      "lastVerified": "2026-08-07"
-    },
-    {
-      "id": "clawhub-openclaw",
-      "name": "OpenClaw / ClawHub",
       "claim": "install-target",
-      "runtime": "bundle_or_single_skill",
-      "install": "clawhub install labring/sealos-skills",
-      "manifest": "openclaw.plugin.json",
-      "commands": "supported",
-      "evidence": "openclaw.plugin.json pointer/version/link validation",
-      "lastVerified": "2026-05-20"
+      "manifest": "plugins/sealos/.qoder-plugin/plugin.json",
+      "invoke": "/sealos"
     },
     {
       "id": "codebuddy",
-      "name": "CodeBuddy",
-      "claim": "install-target",
       "runtime": "plugin",
-      "install": "/plugin marketplace add labring/sealos-skills",
+      "claim": "install-target",
       "manifest": ".codebuddy-plugin/marketplace.json",
-      "commands": "host_dependent",
-      "evidence": ".codebuddy-plugin/marketplace.json explicit inventory and Canvas parity validation",
-      "lastVerified": "2026-05-20"
+      "invoke": "natural language"
+    },
+    {
+      "id": "openclaw",
+      "runtime": "plugin-directory",
+      "claim": "install-target",
+      "manifest": "plugins/sealos/.cursor-plugin/plugin.json",
+      "invoke": "natural language"
     },
     {
       "id": "gemini-cli",
-      "name": "Gemini CLI",
+      "runtime": "context-extension",
       "claim": "context-only",
-      "runtime": "extension",
-      "install": "gemini extensions install https://github.com/labring/sealos-skills",
       "manifest": "gemini-extension.json",
-      "commands": "not_claimed",
-      "evidence": "CLAUDE.md context file + context-only claim validation",
-      "lastVerified": "2026-05-20"
+      "invoke": "natural language"
     },
     {
       "id": "qwen-code",
-      "name": "Qwen Code",
+      "runtime": "context-extension",
       "claim": "context-only",
-      "runtime": "extension",
-      "install": "qwen extensions install https://github.com/labring/sealos-skills",
       "manifest": "qwen-extension.json",
-      "commands": "not_claimed",
-      "evidence": "CLAUDE.md context file + context-only claim validation",
-      "lastVerified": "2026-05-20"
+      "invoke": "natural language"
     },
     {
-      "id": "skills-npx",
-      "name": "skills.sh / npx skills",
-      "claim": "context-only",
-      "runtime": "agent_skill",
-      "install": "npx skills add labring/sealos-skills",
-      "invoke": "/sealos-deploy, /sealos-database, /sealos-s3",
-      "commands": "not_claimed",
-      "evidence": "root skills/** + exact direct-entry subset validation",
-      "lastVerified": "2026-05-20"
-    },
-    {
-      "id": "amp-kimi-generic",
-      "name": "Amp / Kimi / generic repo importers",
+      "id": "skills-sh",
+      "runtime": "agent-skills",
       "claim": "install-target",
-      "runtime": "repo_import",
-      "install": "Install or import https://github.com/labring/sealos-skills.git in the host tool.",
-      "commands": "host_dependent",
-      "evidence": "root skills/** + CLAUDE.md",
-      "lastVerified": "2026-05-20"
+      "manifest": "skills/",
+      "invoke": "use-sealos"
+    },
+    {
+      "id": "brain",
+      "runtime": "managed-agent-skills",
+      "claim": "requires-live-verification",
+      "manifest": "plugins/sealos/skills/sealos-deploy/SKILL.md",
+      "invoke": "sealos-deploy"
     },
     {
       "id": "deepseek-harness",
-      "name": "DeepSeek Harness",
+      "runtime": "profile-bundle",
       "claim": "install-target",
-      "runtime": "plugin",
-      "install": "npx @deepseek-ai/dsh plugin --profile web add github:labring/sealos-skills",
-      "alternateInstall": "npx @deepseek-ai/dsh plugin --profile web add /path/to/sealos-skills",
-      "invoke": "Ask the agent to load Sealos skills through the skill tool; slash-command /sealos is not claimed",
-      "commands": "not_claimed",
-      "evidence": "package.json dsh.bundle + cordis.patch.yml + index.js provider over root skills/**",
-      "lastVerified": "2026-08-14"
+      "manifest": "package.json",
+      "invoke": "use-sealos"
+    },
+    {
+      "id": "amp-kimi-generic",
+      "runtime": "repository-import",
+      "claim": "host-dependent",
+      "manifest": "CLAUDE.md",
+      "invoke": "natural language"
     }
   ]
 }

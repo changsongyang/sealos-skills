@@ -1,19 +1,12 @@
-# Skill workspace (local eval runs, cloned repos)
-skills/sealos-deploy-workspace/
+# Local-only test dumps, notes, and reference clones
+validation-assets/
 
-# Deployment artifacts (auto-generated, not committed)
-.sealos/analysis.json
-.sealos/build/
+# Legacy clone locations (pre-validation-assets); do not re-create these
+sealos-skills-old/
+railway-skills-ref/
 
-docs
-
-# Local plugin packages
-dist/
-
-# npm install residue from the DeepSeek Harness bundle
+.DS_Store
 node_modules/
-
-# Local agent install artifacts; keep repo marketplace metadata tracked
-.agents/*
-!.agents/plugins/
-!.agents/plugins/marketplace.json
+*.log
+__pycache__/
+*.pyc

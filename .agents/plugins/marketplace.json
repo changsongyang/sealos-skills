@@ -1,7 +1,7 @@
 {
-  "name": "sealos",
+  "name": "sealos-plugin",
   "interface": {
-    "displayName": "Sealos"
+    "displayName": "Sealos Plugin"
   },
   "plugins": [
     {
@@ -14,7 +14,7 @@
         "installation": "AVAILABLE",
         "authentication": "ON_INSTALL"
       },
-      "category": "Coding"
+      "category": "Developer Tools"
     }
   ]
 }

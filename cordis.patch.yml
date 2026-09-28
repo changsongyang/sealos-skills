@@ -1,6 +1,6 @@
-# Sealos dsh profile bundle: registers every root skills/<name>/SKILL.md
-# bundle on ctx.skills. Applied after @deepseek-ai/dsh-base, which already
-# mounts the skill registry and the model-facing skill loader.
+# Sealos dsh profile bundle: registers the packaged use-sealos skill on
+# ctx.skills. Applied after @deepseek-ai/dsh-base, which already mounts the
+# skill registry and the model-facing skill loader.
 - insert:
-    - id: sealos-skills
+    - id: sealos-skill
       name: sealos
